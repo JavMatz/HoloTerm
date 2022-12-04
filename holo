@@ -1,0 +1,105 @@
+#!/usr/bin/env python
+from requests import get
+from datetime import datetime
+from dateutil import tz
+import json
+
+japanTime = tz.gettz('UTC+09:00')
+localTime = tz.tzlocal()
+
+def alreadyStreamed(videoData):
+    """ 
+    See if the stream has already been streamed
+    """
+    streamingDate = datetime.strptime(videoData["datetime"], "%Y/%m/%d %H:%M:%S")
+    streamingDate = streamingDate.replace(tzinfo=japanTime)
+
+    now = datetime.now()
+    now = now.replace(tzinfo=localTime)
+
+    if now > streamingDate:
+        return True 
+    else:
+        return False
+
+def jpnToLclTime(date):
+    """ 
+    Convert date to local time
+
+    Args:
+    datetime: String with format yyyy/mm/dd hh:mm:ss on JST Time
+    """
+    jpn = datetime.strptime(date, "%Y/%m/%d %H:%M:%S")
+    jpn = jpn.replace(tzinfo=japanTime)
+
+    local = jpn.astimezone(localTime) 
+    return local.strftime("%Y/%m/%d %H:%M:%S")
+
+def printVideoInfo(videoData):
+    """
+    Prints the video information on a pretty line.
+
+    Args:
+    videoData is a dictionary with the next format  
+    {
+        "displayDate": String with the hour of the video on a 24hr format on JST Time
+        "datetime": String with the date of the video on a yyyy/mm/dd hh:mm:ss format for JST Time
+        "isLive": Bool, true if is talent is streaming, false if it's not
+        "platformType": Int, 1 if YouTube, 0 if Twitch,
+        "url": String, the link to the stream. If platformType=0, this links to the Twitch profile of the talent
+        "thumbnail": String, link to the thumbnail shown on the hololive website
+        "title": String with the title of the video. If platformType=0, this string is empty
+        "name": String with the name of the talent
+        "talent": Dictionary with the following format
+            {
+                "iconImageUrl": String, link to to an icon of the talent
+        }
+        "collaboTalents": List containing dictionaries like the one in talent
+    }
+    """
+    line = []
+    # Live or not
+    if videoData["isLive"]:
+        line.append("LIVE 🔴")
+    else:
+        line.append("NEXT 🕑")
+        line.append("at "+jpnToLclTime(videoData["datetime"]))
+
+    # # Where
+    # if videoData["platformType"] == 0:
+    #     line.append("on Twitch.tv")
+    # elif videoData["platformType"] == 1:
+    #     line.append("on YouTube.com")
+
+    # Who
+    line.append(videoData["name"])
+    # Like to put the oshi mark here
+    # line.append("✌")
+
+    # What
+    if videoData["platformType"] == 0:
+        line.append("")
+    elif videoData["platformType"] == 1:
+        line.append(videoData["title"])
+
+    # The link
+    line.append("🔗 "+videoData["url"])
+
+    print(' '.join(line))
+
+if __name__ == "__main__":
+    request = get('https://schedule.hololive.tv/api/list/7')
+    scheduleData = request.json()["dateGroupList"]
+
+    videos = []
+    for item in scheduleData: 
+        videos.extend(item["videoList"])
+
+    liveNow = [video for video in videos if video["isLive"]]
+    upComing = [video for video in videos if video not in liveNow]
+    upComing = [video for video in upComing if not alreadyStreamed(video)]
+
+    for video in [*liveNow, *upComing]:
+        printVideoInfo(video)
+
+    request.close()
