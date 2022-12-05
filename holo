@@ -86,10 +86,10 @@ def print_video_info(videoData):
     line = []
     # Live or not
     if videoData["isLive"]:
-        line.append("LIVE 🔴")
+        line.append("LIVE 🔴") if not showStreaming else line.append("")
     else:
-        line.append("NEXT 🕑")
-        line.append("at "+japan_to_local_time(videoData["datetime"]))
+        line.append("STARTING at") if not showUpcoming else line.append("")
+        line.append("📅 "+japan_to_local_time(videoData["datetime"]))
 
     # Who
     line.append(videoData["name"])
@@ -112,8 +112,8 @@ if __name__ == "__main__":
     localTime = tz.tzlocal()
 
     talents = get_args().talents
-    streaming = get_args().streaming
-    upcoming = get_args().upcoming
+    showStreaming = get_args().streaming
+    showUpcoming = get_args().upcoming
     schedules = get_schedules()
 
     videos = []
@@ -124,12 +124,12 @@ if __name__ == "__main__":
     upComing = [video for video in videos if video not in liveNow]
     upComing = [video for video in upComing if not already_streamed(video)]
 
-    if not(streaming or upcoming) or (streaming and upcoming): 
+    if not(showStreaming or showUpcoming) or (showStreaming and showUpcoming): 
         for video in [*liveNow, *upComing]:
             print_video_info(video)
-    elif get_args().streaming:
+    elif showStreaming:
         for video in liveNow:
             print_video_info(video)
-    elif get_args().upcoming:
+    elif showUpcoming:
         for video in upComing:
             print_video_info(video)
