@@ -2,12 +2,38 @@
 from requests import get
 from datetime import datetime
 from dateutil import tz
+import argparse
 import json
 
-japanTime = tz.gettz('UTC+09:00')
-localTime = tz.tzlocal()
+def get_args():
+    parser = argparse.ArgumentParser(
+            description='Check the schedules of the talents of HoloPro from your terminal!')
 
-def alreadyStreamed(videoData):
+    parser.add_argument('talents', metavar='talents', nargs='+', choices=['pro', 'stars', 'live'], default=['pro'], help='Pick between the boys and the girls or both')
+    parser.add_argument('-s', '--streaming', action='store_true', help="Only show active streams")
+    parser.add_argument('-u', '--upcoming', action='store_true', help="Only show upcoming streams")
+
+    return parser.parse_args()
+
+def get_schedules():
+    if ('pro' in talents) or ('stars' in talents and 'live' in talents):
+        requestLive = get('https://schedule.hololive.tv/api/list/7')
+        requestStars = get('https://schedule.hololive.tv/api/list/10')
+        scheduleData = [*requestLive.json()["dateGroupList"], *requestStars.json()["dateGroupList"]]
+        requestStars.close()
+        requestLive.close()
+    elif 'stars' in talents:
+        requestStars = get('https://schedule.hololive.tv/api/list/10')
+        scheduleData = requestStars.json()["dateGroupList"]
+        requestStars.close()
+    elif 'live' in talents:
+        requestLive = get('https://schedule.hololive.tv/api/list/7')
+        scheduleData = requestLive.json()["dateGroupList"]
+        requestLive.close()
+
+    return scheduleData
+
+def already_streamed(videoData):
     """ 
     See if the stream has already been streamed
     """
@@ -22,7 +48,7 @@ def alreadyStreamed(videoData):
     else:
         return False
 
-def jpnToLclTime(date):
+def japan_to_local_time(date):
     """ 
     Convert date to local time
 
@@ -35,7 +61,7 @@ def jpnToLclTime(date):
     local = jpn.astimezone(localTime) 
     return local.strftime("%Y/%m/%d %H:%M:%S")
 
-def printVideoInfo(videoData):
+def print_video_info(videoData):
     """
     Prints the video information on a pretty line.
 
@@ -63,13 +89,7 @@ def printVideoInfo(videoData):
         line.append("LIVE 🔴")
     else:
         line.append("NEXT 🕑")
-        line.append("at "+jpnToLclTime(videoData["datetime"]))
-
-    # # Where
-    # if videoData["platformType"] == 0:
-    #     line.append("on Twitch.tv")
-    # elif videoData["platformType"] == 1:
-    #     line.append("on YouTube.com")
+        line.append("at "+japan_to_local_time(videoData["datetime"]))
 
     # Who
     line.append(videoData["name"])
@@ -88,18 +108,28 @@ def printVideoInfo(videoData):
     print(' '.join(line))
 
 if __name__ == "__main__":
-    request = get('https://schedule.hololive.tv/api/list/7')
-    scheduleData = request.json()["dateGroupList"]
+    japanTime = tz.gettz('UTC+09:00')
+    localTime = tz.tzlocal()
+
+    talents = get_args().talents
+    streaming = get_args().streaming
+    upcoming = get_args().upcoming
+    schedules = get_schedules()
 
     videos = []
-    for item in scheduleData: 
+    for item in schedules: 
         videos.extend(item["videoList"])
 
     liveNow = [video for video in videos if video["isLive"]]
     upComing = [video for video in videos if video not in liveNow]
-    upComing = [video for video in upComing if not alreadyStreamed(video)]
+    upComing = [video for video in upComing if not already_streamed(video)]
 
-    for video in [*liveNow, *upComing]:
-        printVideoInfo(video)
-
-    request.close()
+    if not(streaming or upcoming) or (streaming and upcoming): 
+        for video in [*liveNow, *upComing]:
+            print_video_info(video)
+    elif get_args().streaming:
+        for video in liveNow:
+            print_video_info(video)
+    elif get_args().upcoming:
+        for video in upComing:
+            print_video_info(video)
